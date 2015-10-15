@@ -15,6 +15,8 @@
  */
 package org.commonjava.maven.ext.manip.impl;
 
+import static java.util.Arrays.asList;
+
 import java.io.BufferedReader;
 import java.io.Closeable;
 import java.io.File;
@@ -50,6 +52,8 @@ import org.slf4j.LoggerFactory;
 public class ProjectScmManipulator
     implements Manipulator
 {
+
+    static final String SCM_GIT = "scm:git:";
 
     // private static final String VALIDATE_PHASE = "validate";
 
@@ -106,6 +110,13 @@ public class ProjectScmManipulator
                 String scmConnection = null;
                 try {
                     scmConnection = scmInfoLookup.getConnection(new File("."));
+                    if (scmConnection != null && state.isRemoveDomainFromScmConnectionHostname()) {
+                        String hostname = extractHostnameFromScmConnection(scmConnection);
+                        System.err.println("hostname " + hostname);
+                        String hostnameWithoutDomain = stripDomainName(hostname);
+                        System.err.println("hostnameWithoutDomain " + hostnameWithoutDomain);
+                        scmConnection = scmConnection.replace(hostname, hostnameWithoutDomain);
+                    }
                 } catch (Exception e) {
                     logger.error("Can not find scm connection for project " + project + " - "
                             + e.getMessage());
@@ -134,6 +145,62 @@ public class ProjectScmManipulator
         }
 
         return Collections.emptySet();
+    }
+
+    // @VisibleForTesting
+    String stripDomainName(String hostname) {
+        if (isBlank(hostname)) {
+            return null;
+        }
+        int index = hostname.indexOf(".");
+        String beforeDot = index < 0 ? hostname : hostname.substring(0, index);
+        return isBlank(beforeDot) ? null : beforeDot.trim();
+    }
+
+    // inlined commons StringUtils.isBlank
+    private boolean isBlank(String string) {
+        int strLen;
+        if (string == null || (strLen = string.length()) == 0) {
+            return true;
+        }
+        for (int i = 0; i < strLen; i++) {
+            if (!Character.isWhitespace(string.charAt(i))) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    // @VisibleForTesting
+    String extractHostnameFromScmConnection(String scmConnection) {
+        if (isBlank(scmConnection)) {
+            return null;
+        }
+        if (!scmConnection.startsWith(SCM_GIT)) {
+            return null;
+        }
+        scmConnection = scmConnection.substring(SCM_GIT.length());
+        List<String> prefixes = asList("git://", "http://", "https://");
+        for (String prefix : prefixes) {
+            if (scmConnection.startsWith(prefix)) {
+                return stripTypeAndAfterHostname(scmConnection, prefix);
+            }
+        }
+
+        int index = scmConnection.indexOf(":");
+        if (index > 0) {
+            String string = scmConnection.substring(0, index);
+            index = string.indexOf("@");
+            return index >= 0 && index + 1 < string.length() ? string.substring(index + 1) : string;
+        }
+
+        return null;
+    }
+
+    private String stripTypeAndAfterHostname(String scmConnection, String prefix) {
+        String withoutType = scmConnection.substring(prefix.length());
+        int index = withoutType.indexOf("/");
+        return index < 0 ? withoutType : withoutType.substring(0, index);
     }
 
     @Override
@@ -181,16 +248,12 @@ public class ProjectScmManipulator
                     throw new IllegalArgumentException("Url of remote " + remoteName
                             + " was not specified in " + gitConfigFile.getAbsolutePath());
                 }
-                /*
-                 * FIXME remap hostnames - where to take the map ? or better solution strip domain from hostname if (connection
-                 * != null && connectionContainsHostnameToBeMapped(connection)) { connection = remapHostName(connection); }
-                 */
             } catch (IOException e) {
                 throw new IllegalArgumentException(
                         "Can not read url of remote " + remoteName + " from git config "
                         + gitConfigFile.getAbsolutePath() + " - " + e.getMessage(), e);
             }
-            return connection == null ? null : "scm:git:" + connection;
+            return connection == null ? null : SCM_GIT + connection;
         }
 
         /* inlined from commons-io FileUtils.readLines */

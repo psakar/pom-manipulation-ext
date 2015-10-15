@@ -17,7 +17,9 @@ package org.commonjava.maven.ext.manip.impl;
 
 import static java.lang.Boolean.TRUE;
 import static java.util.Collections.singletonList;
+import static org.commonjava.maven.ext.manip.impl.ProjectScmManipulator.SCM_GIT;
 import static org.commonjava.maven.ext.manip.state.ProjectScmStateTest.setUpdateProjectScmConnectionPropertyTo;
+import static org.commonjava.maven.ext.manip.state.ProjectScmStateTest.setUpdateRemoveDomainFromScmConnectionHostnameTo;
 import static org.junit.Assert.assertEquals;
 import static org.mockito.Matchers.any;
 import static org.mockito.Mockito.when;
@@ -63,20 +65,54 @@ public class ProjectScmManipulatorTest
 
     private List<Project> projects;
 
+    private Properties userProperties;
+
     @Before
     public void before() throws Exception {
-        session = createManipulationSession();
+        userProperties = new Properties();
+        session = createManipulationSession(userProperties);
         manipulator = new ProjectScmManipulator(scmInfoLookup);
         project = createProject();
         projects = singletonList(project);
     }
 
     @Test
-    public void scmIsUpdatedWhenManipulationIsEnablednAndConnectionIsMissing()
-        throws Exception
+    public void scmIsUpdatedWhenManipulationIsEnablednAndConnectionIsMissing() throws Exception
     {
         enablePomManipulation();
         when(scmInfoLookup.getConnection(any(File.class))).thenReturn(createRandomString());
+
+        Set<Project> changes = runMaven();
+
+        assertScmConnectionOfChangedProjects(scmInfoLookup.getConnection(null), changes);
+    }
+
+    @Test
+    public void scmIsUpdatedWhenManipulationIsEnablednAndConnectionIsMissingAndDomainStripped()
+            throws Exception {
+        String connectionSuffix = createRandomString();
+        String host = createRandomString();
+        String domain = createRandomString();
+        String scmConnectionWithFullHostname = SCM_GIT + "http://" + host + "." + domain + "/"
+                + connectionSuffix;
+        String scmConnectionWithoutDomain = SCM_GIT + "http://" + host + "/" + connectionSuffix;
+
+        enablePomManipulation();
+        setUpdateRemoveDomainFromScmConnectionHostnameTo(userProperties, TRUE.toString());
+
+        when(scmInfoLookup.getConnection(any(File.class)))
+                .thenReturn(scmConnectionWithFullHostname);
+
+        Set<Project> changes = runMaven();
+
+        assertScmConnectionOfChangedProjects(scmConnectionWithoutDomain, changes);
+    }
+
+    @Test
+    public void scmIsUpdatedWhenManipulationIsEnabledAndConnectionIsDifferent() throws Exception {
+        enablePomManipulation();
+        when(scmInfoLookup.getConnection(any(File.class))).thenReturn(createRandomString());
+        setProjectScmConnection(createRandomString());
 
         Set<Project> changes = runMaven();
 
@@ -119,6 +155,28 @@ public class ProjectScmManipulatorTest
         assertEquals(0, changes.size());
     }
 
+    @Test
+    public void testStripDomainName() {
+        assertEquals(null, manipulator.stripDomainName(null));
+        assertEquals(null, manipulator.stripDomainName(""));
+        assertEquals("localhost", manipulator.stripDomainName("localhost"));
+        assertEquals("localhost", manipulator.stripDomainName("localhost.localdomain"));
+    }
+
+    @Test
+    public void testExtractHostnameFromScmConnection() {
+        assertEquals(null, manipulator.extractHostnameFromScmConnection(null));
+        assertEquals(null, manipulator.extractHostnameFromScmConnection(""));
+        assertEquals("git.domain.com", manipulator.extractHostnameFromScmConnection(
+                SCM_GIT + "git://git.domain.com/user/maven/pom-manipulation-ext.git"));
+        assertEquals("git.domain.com", manipulator.extractHostnameFromScmConnection(
+                SCM_GIT + "http://git.domain.com/user/maven/pom-manipulation-ext.git"));
+        assertEquals("git.domain.com", manipulator.extractHostnameFromScmConnection(
+                SCM_GIT + "https://git.domain.com/user/maven/pom-manipulation-ext.git"));
+        assertEquals("github.com", manipulator.extractHostnameFromScmConnection(
+                SCM_GIT + "git@github.com:release-engineering/pom-manipulation-ext.git"));
+    }
+
     private Set<Project> runMaven() throws ManipulationException {
         manipulator.init(session);
         return manipulator.applyChanges(projects, session);
@@ -143,9 +201,9 @@ public class ProjectScmManipulatorTest
         }
     }
 
-    private ManipulationSession createManipulationSession() {
+    private ManipulationSession createManipulationSession(Properties userProperties) {
         when(mavenSession.getRequest()).thenReturn(request);
-        when(request.getUserProperties()).thenReturn(new Properties());
+        when(request.getUserProperties()).thenReturn(userProperties);
         ManipulationSession session = new ManipulationSession();
         session.setMavenSession(mavenSession);
         return session;

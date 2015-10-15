@@ -30,10 +30,15 @@ public class ProjectScmState
     implements State
 {
 
-    /** Set this property to true using <code>-DupdateProjectScmConnection=true</code> in order to turn on injection of the project scm info. */
+    /** Set this property to true using <code>-DupdateProjectScmConnection=true</code> in order to turn on injection of the project scm connection. */
     public static final String UPDATE_PROJECT_SCM_CONNECTION_PROPERTY = "updateProjectScmConnection";
 
+    /** Set this property to true using <code>-removeDomainFromScmConnectionHostname=true</code> in order to remove domain from hostname used in project scm connection. */
+    public static final String REMOVE_DOMAIN_FROM_SCM_CONNECTION_HOSTNAME = "removeDomainFromScmConnectionHostname";
+
     private final boolean updateProjectScmConnectionEnabled;
+
+    private final boolean removeDomainFromScmConnectionHostname;
 
 
     static
@@ -50,6 +55,8 @@ public class ProjectScmState
     {
         updateProjectScmConnectionEnabled = Boolean.parseBoolean(
                 userProperties.getProperty(UPDATE_PROJECT_SCM_CONNECTION_PROPERTY, "false"));
+        removeDomainFromScmConnectionHostname = Boolean.parseBoolean(
+                userProperties.getProperty(REMOVE_DOMAIN_FROM_SCM_CONNECTION_HOSTNAME, "false"));
     }
 
     /**
@@ -71,6 +78,15 @@ public class ProjectScmState
     public boolean isUpdateProjectScmConnectionEnabled()
     {
         return updateProjectScmConnectionEnabled;
+    }
+
+    /**
+     * @see ProjectScmState#REMOVE_DOMAIN_FROM_SCM_CONNECTION_HOSTNAME
+     * 
+     * @return whether remove domain from project scm connection hostname.
+     */
+    public boolean isRemoveDomainFromScmConnectionHostname() {
+        return removeDomainFromScmConnectionHostname;
     }
 
 }
